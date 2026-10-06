@@ -245,19 +245,19 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\Sebas\\.nuget\\packages\\": {}
+    "/Users/dennisvera/.nuget/packages/": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\Sebas\\Desktop\\trabajoBD\\tienda\\tienda.csproj",
+      "projectUniqueName": "/Users/dennisvera/github/BlazorStoreDB26/tienda.csproj",
       "projectName": "tienda",
-      "projectPath": "C:\\Users\\Sebas\\Desktop\\trabajoBD\\tienda\\tienda.csproj",
-      "packagesPath": "C:\\Users\\Sebas\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\Sebas\\Desktop\\trabajoBD\\tienda\\obj\\",
+      "projectPath": "/Users/dennisvera/github/BlazorStoreDB26/tienda.csproj",
+      "packagesPath": "/Users/dennisvera/.nuget/packages/",
+      "outputPath": "/Users/dennisvera/github/BlazorStoreDB26/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\Sebas\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        "/Users/dennisvera/.nuget/NuGet/NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net10.0"
@@ -327,7 +327,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.302/PortableRuntimeIdentifierGraph.json",
+        "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.302/PortableRuntimeIdentifierGraph.json",
         "packagesToPrune": {
           "Microsoft.AspNetCore": "(,10.0.32767]",
           "Microsoft.AspNetCore.Antiforgery": "(,10.0.32767]",

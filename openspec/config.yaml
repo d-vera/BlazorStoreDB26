@@ -1,20 +1,41 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Tech stack: Blazor Server (.NET 8/10), C#, MongoDB Driver (Bson), Bootstrap.
+  Architecture: Blazor Pages (.razor) -> Scoped Services -> Models (BSON) -> MongoService (Singleton).
+  Error Handling: Result / Result<T> pattern for business logic and validation responses.
+  Database: MongoDB (document-oriented, no foreign keys — references managed at application layer).
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Entity Inventory (6 collections + 1 embedded document):
+    Categoria: Id, Nombre, Descripcion, Codigo, FechaCreacion, Responsable, PorcentajeImpuesto, ProductosIds, Activo, Version
+    Producto: Id, Nombre, Descripcion, Precio, Stock, Marca, CategoriaId, ProveedoresIds, PedidosIds, Activo, Version
+    Cliente: Id, Nombres, Apellidos, Documento, Email, Telefono, FechaRegistro, PerfilId?, PedidosIds, Activo, Version
+    Perfil: Id, ClienteId?, Direccion, Ciudad, Pais, FechaNacimiento, Preferencias, PuntosFidelidad, Activo, Version
+    Pedido: Id, ClienteId, FechaPedido, Estado, Total, MetodoPago, DireccionEnvio, ProductosIds, Detalles[], Activo, Version
+    Proveedor: Id, Nombre, Nit, Contacto, Telefono, Email, Direccion, Pais, ProductosIds, Activo, Version
+    DetallePedido (embedded in Pedido): ProductoId, Cantidad, PrecioUnitario
+
+  Referential Data Model:
+    - 1:1 Bidirectional: Cliente <-> Perfil (Cliente.PerfilId? / Perfil.ClienteId?)
+    - 1:N Bidirectional: Categoria <-> Producto (Categoria.ProductosIds / Producto.CategoriaId)
+    - 1:N Bidirectional: Cliente <-> Pedido (Cliente.PedidosIds / Pedido.ClienteId)
+    - N:M Bidirectional: Producto <-> Proveedor (Producto.ProveedoresIds / Proveedor.ProductosIds)
+    - N:M Bidirectional: Producto <-> Pedido (Producto.PedidosIds / Pedido.ProductosIds)
+    - 1:N Embedded: Pedido -> DetallePedido (Pedido.Detalles[] embeds DetallePedido documents)
+
+  Common Fields (all collections): Activo (bool, soft-delete flag), Version (int, optimistic concurrency).
+
+  Audit & Security:
+    - Input sanitization: Trim whitespace, strip XSS HTML tags, remove NoSQL operators ($ and {}), filter control characters.
+    - Categorical fields restricted to select dropdowns (InputSelect).
+    - Deletion: Exclusively logical deletion (Activo = false), never physical removal.
+    - Optimistic Concurrency: Handled via the version counter.
+
+
+rules:
+  proposal:
+    - Keep proposals concise and focused on business value
+    - Explicitly state impact on referential integrity and logical deletion
+  tasks:
+    - Group tasks by architecture layer (Models, Services, UI/Pages)
+    - Always include verification and rollback compensation tests
