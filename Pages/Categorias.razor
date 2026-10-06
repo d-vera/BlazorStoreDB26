@@ -1,0 +1,260 @@
+@page "/categorias"
+@page "/categorias/crear"
+@page "/categorias/actualizar/{Id}"
+@using tienda.Common
+@using tienda.Models
+@using tienda.Services
+@inject CategoriaService CategoriaService
+@inject ProductoService ProductoService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Categorías</PageTitle>
+
+<h1>@(showForm ? (editing ? "Actualizar categoría" : "Crear categoría") : "Categorías")</h1>
+
+@if (!string.IsNullOrWhiteSpace(alertMessage))
+{
+    <div class="alert @(alertSuccess ? "alert-success" : "alert-danger")" role="alert">
+        @alertMessage
+        @if (alertErrors.Count > 0)
+        {
+            <ul class="mb-0 mt-1">
+                @foreach (var error in alertErrors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        }
+    </div>
+}
+
+@if (!showForm)
+{
+    <section class="section-panel">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h4 mb-0">Categorías activas</h2>
+            <a class="btn btn-primary" href="/categorias/crear">Nueva categoría</a>
+        </div>
+
+        @if (categorias.Count == 0)
+        {
+            <p class="text-muted">No hay categorías activas.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Código</th>
+                            <th>Descripción</th>
+                            <th>Impuesto</th>
+                            <th>Responsable</th>
+                            <th>Productos</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in categorias)
+                        {
+                            var activeProductsCount = productos.Count(p => p.CategoriaId == item.Id && p.Activo);
+                            <tr>
+                                <td class="fw-semibold">@item.Nombre</td>
+                                <td><span class="badge-soft-teal">@item.Codigo</span></td>
+                                <td>@item.Descripcion</td>
+                                <td>@item.PorcentajeImpuesto.ToString("N1")%</td>
+                                <td>@item.Responsable</td>
+                                <td>@activeProductsCount</td>
+                                <td>
+                                    <a class="btn btn-sm btn-outline-primary me-2" href="/categorias/actualizar/@item.Id">Editar</a>
+                                    <button class="btn btn-sm btn-outline-danger" type="button" @onclick="() => DeleteAsync(item.Id)">Eliminar</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+else
+{
+    <section class="form-panel">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <p class="eyebrow">@(editing ? "Edición" : "Registro")</p>
+                <h2 class="h4 mb-0">@(editing ? "Datos de la categoría" : "Nueva categoría")</h2>
+            </div>
+            <a class="btn btn-outline-secondary" href="/categorias">Volver a categorías</a>
+        </div>
+
+        <EditForm Model="categoria" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="nombre">Nombre</label>
+                    <InputText id="nombre" class="form-control" @bind-Value="categoria.Nombre" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="codigo">Código</label>
+                    <InputText id="codigo" class="form-control" @bind-Value="categoria.Codigo" placeholder="Ej. CAT-ELE-001" />
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="descripcion">Descripción</label>
+                <InputTextArea id="descripcion" class="form-control" @bind-Value="categoria.Descripcion" />
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="responsable">Responsable</label>
+                    <InputText id="responsable" class="form-control" @bind-Value="categoria.Responsable" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="impuesto">Impuesto (%)</label>
+                    <InputNumber id="impuesto" class="form-control" @bind-Value="categoria.PorcentajeImpuesto" min="0" max="100" />
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <button class="btn btn-primary me-2" type="submit" disabled="@processing">@(editing ? "Guardar cambios" : "Crear categoría")</button>
+                <a class="btn btn-secondary" href="/categorias">Cancelar</a>
+            </div>
+        </EditForm>
+    </section>
+}
+
+@code {
+    private List<Categoria> categorias = [];
+    private List<Producto> productos = [];
+    [Parameter]
+    public string? Id { get; set; }
+
+    private Categoria categoria = new();
+    private bool showForm;
+    private bool editing;
+    private bool processing;
+    private bool alertSuccess;
+    private string alertMessage = string.Empty;
+    private List<string> alertErrors = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        UpdateRouteState();
+        if (!showForm)
+        {
+            await LoadAsync();
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(Id))
+        {
+            await LoadForEditAsync(Id);
+        }
+        else
+        {
+            PrepareNew();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += HandleLocationChanged;
+    }
+
+    private void UpdateRouteState()
+    {
+        showForm = !string.IsNullOrWhiteSpace(Id) || Navigation.Uri.TrimEnd('/').EndsWith("/categorias/crear", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task LoadAsync()
+    {
+        var result = await CategoriaService.GetAllAsync();
+        ShowResult(result);
+        if (result.Success && result.Data is not null)
+        {
+            categorias = result.Data;
+        }
+
+        var productsResult = await ProductoService.GetAllAsync();
+        if (productsResult.Success && productsResult.Data is not null)
+        {
+            productos = productsResult.Data;
+        }
+    }
+
+    private void PrepareNew()
+    {
+        editing = false;
+        categoria = new Categoria { FechaCreacion = DateTime.UtcNow };
+        ClearAlert();
+    }
+
+    private async Task LoadForEditAsync(string id)
+    {
+        var result = await CategoriaService.GetByIdAsync(id);
+        ShowResult(result);
+        if (result.Success && result.Data is not null)
+        {
+            categoria = result.Data;
+            editing = true;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        processing = true;
+        ClearAlert();
+
+        var result = editing
+            ? await CategoriaService.UpdateAsync(categoria.Id, categoria)
+            : await CategoriaService.CreateAsync(categoria);
+
+        ShowResult(result);
+        if (result.Success)
+        {
+            Navigation.NavigateTo("/categorias");
+        }
+
+        processing = false;
+    }
+
+    private async Task DeleteAsync(string id)
+    {
+        processing = true;
+        var result = await CategoriaService.DeleteLogicoAsync(id);
+        ShowResult(result);
+        if (result.Success)
+        {
+            await LoadAsync();
+        }
+
+        processing = false;
+    }
+
+    private void ShowResult(Result result)
+    {
+        alertSuccess = result.Success;
+        alertMessage = result.Message;
+        alertErrors = result.Errors;
+    }
+
+    private void ClearAlert()
+    {
+        alertSuccess = false;
+        alertMessage = string.Empty;
+        alertErrors = [];
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        UpdateRouteState();
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= HandleLocationChanged;
+    }
+}

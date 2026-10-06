@@ -1,0 +1,319 @@
+@page "/proveedores"
+@page "/proveedores/crear"
+@page "/proveedores/actualizar/{Id}"
+@using tienda.Common
+@using tienda.Models
+@using tienda.Services
+@inject ProveedorService ProveedorService
+@inject ProductoService ProductoService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Proveedores</PageTitle>
+
+<h1>@(showForm ? (editing ? "Actualizar proveedor" : "Crear proveedor") : "Proveedores")</h1>
+
+@if (!string.IsNullOrWhiteSpace(alertMessage))
+{
+    <div class="alert @(alertSuccess ? "alert-success" : "alert-danger")" role="alert">
+        @alertMessage
+        @if (alertErrors.Count > 0)
+        {
+            <ul class="mb-0 mt-1">
+                @foreach (var error in alertErrors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        }
+    </div>
+}
+
+@if (!showForm)
+{
+    <section class="section-panel">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h4 mb-0">Proveedores activos</h2>
+            <a class="btn btn-primary" href="/proveedores/crear">Nuevo proveedor</a>
+        </div>
+
+        @if (proveedores.Count == 0)
+        {
+            <p class="text-muted">No hay proveedores activos.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>NIT</th>
+                            <th>Contacto</th>
+                            <th>Teléfono</th>
+                            <th>Email</th>
+                            <th>Ubicación</th>
+                            <th>Productos asociables</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in proveedores)
+                        {
+                            var prodNames = productos
+                                .Where(p => item.ProductosIds.Contains(p.Id))
+                                .Select(p => p.Nombre);
+
+                            <tr>
+                                <td class="fw-semibold">@item.Nombre</td>
+                                <td><span class="badge-soft-teal">@item.Nit</span></td>
+                                <td>@item.Contacto</td>
+                                <td>@item.Telefono</td>
+                                <td>@item.Email</td>
+                                <td>@item.Direccion, @item.Pais</td>
+                                <td>@(string.Join(", ", prodNames))</td>
+                                <td>
+                                    <a class="btn btn-sm btn-outline-primary me-2" href="/proveedores/actualizar/@item.Id">Editar</a>
+                                    <button class="btn btn-sm btn-outline-danger" type="button" @onclick="() => DeleteAsync(item.Id)">Eliminar</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+else
+{
+    <section class="form-panel">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <p class="eyebrow">@(editing ? "Edición" : "Registro")</p>
+                <h2 class="h4 mb-0">@(editing ? "Datos del proveedor" : "Nuevo proveedor")</h2>
+            </div>
+            <a class="btn btn-outline-secondary" href="/proveedores">Volver a proveedores</a>
+        </div>
+
+        <EditForm Model="proveedor" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="nombre">Razon Social / Nombre</label>
+                    <InputText id="nombre" class="form-control" @bind-Value="proveedor.Nombre" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="nit">NIT</label>
+                    <InputText id="nit" class="form-control" @bind-Value="proveedor.Nit" placeholder="Ej. 900.123.456-7" />
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="contacto">Persona de contacto</label>
+                    <InputText id="contacto" class="form-control" @bind-Value="proveedor.Contacto" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="telefono">Teléfono</label>
+                    <InputText id="telefono" class="form-control" @bind-Value="proveedor.Telefono" />
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="email">Correo electrónico</label>
+                <InputText id="email" class="form-control" @bind-Value="proveedor.Email" />
+            </div>
+
+            <div class="row">
+                <div class="col-md-8 mb-3">
+                    <label class="form-label" for="direccion">Dirección</label>
+                    <InputText id="direccion" class="form-control" @bind-Value="proveedor.Direccion" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label" for="pais">País</label>
+                    <InputText id="pais" class="form-control" @bind-Value="proveedor.Pais" />
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Productos asociados (N:N)</label>
+                @if (productos.Count == 0)
+                {
+                    <p class="text-muted small mb-0">No hay productos registrados.</p>
+                }
+                else
+                {
+                    <div class="checkbox-group-container">
+                        @foreach (var prod in productos)
+                        {
+                            var isChecked = selectedProductIds.Contains(prod.Id);
+                            <label class="checkbox-item mb-1">
+                                <input type="checkbox" class="form-check-input" checked="@isChecked" @onchange="(e) => ToggleProduct(prod.Id, e.Value)" />
+                                <span>@prod.Nombre <small class="text-muted">($@prod.Precio.ToString("N0"))</small></span>
+                            </label>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="mt-4">
+                <button class="btn btn-primary me-2" type="submit" disabled="@processing">@(editing ? "Guardar cambios" : "Crear proveedor")</button>
+                <a class="btn btn-secondary" href="/proveedores">Cancelar</a>
+            </div>
+        </EditForm>
+    </section>
+}
+
+@code {
+    private List<Proveedor> proveedores = [];
+    private List<Producto> productos = [];
+    private HashSet<string> selectedProductIds = [];
+
+    [Parameter]
+    public string? Id { get; set; }
+
+    private Proveedor proveedor = new();
+    private bool showForm;
+    private bool editing;
+    private bool processing;
+    private bool alertSuccess;
+    private string alertMessage = string.Empty;
+    private List<string> alertErrors = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        UpdateRouteState();
+        if (!showForm)
+        {
+            await LoadAsync();
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(Id))
+        {
+            await LoadForEditAsync(Id);
+        }
+        else
+        {
+            PrepareNew();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += HandleLocationChanged;
+    }
+
+    private void UpdateRouteState()
+    {
+        showForm = !string.IsNullOrWhiteSpace(Id) || Navigation.Uri.TrimEnd('/').EndsWith("/proveedores/crear", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task LoadAsync()
+    {
+        var provResult = await ProveedorService.GetAllAsync();
+        ShowResult(provResult);
+        if (provResult.Success && provResult.Data is not null)
+        {
+            proveedores = provResult.Data;
+        }
+
+        var prodResult = await ProductoService.GetAllAsync();
+        if (prodResult.Success && prodResult.Data is not null)
+        {
+            productos = prodResult.Data;
+        }
+    }
+
+    private void PrepareNew()
+    {
+        editing = false;
+        proveedor = new Proveedor();
+        selectedProductIds = [];
+        ClearAlert();
+    }
+
+    private async Task LoadForEditAsync(string id)
+    {
+        await LoadAsync();
+        var result = await ProveedorService.GetByIdAsync(id);
+        ShowResult(result);
+        if (result.Success && result.Data is not null)
+        {
+            proveedor = result.Data;
+            selectedProductIds = new HashSet<string>(proveedor.ProductosIds ?? []);
+            editing = true;
+        }
+    }
+
+    private void ToggleProduct(string productId, object? checkedValue)
+    {
+        bool isChecked = checkedValue is bool b && b;
+        if (isChecked)
+        {
+            selectedProductIds.Add(productId);
+        }
+        else
+        {
+            selectedProductIds.Remove(productId);
+        }
+        proveedor.ProductosIds = selectedProductIds.ToList();
+    }
+
+    private async Task SaveAsync()
+    {
+        processing = true;
+        ClearAlert();
+        proveedor.ProductosIds = selectedProductIds.ToList();
+
+        var result = editing
+            ? await ProveedorService.UpdateAsync(proveedor.Id, proveedor)
+            : await ProveedorService.CreateAsync(proveedor);
+
+        ShowResult(result);
+        if (result.Success)
+        {
+            Navigation.NavigateTo("/proveedores");
+        }
+
+        processing = false;
+    }
+
+    private async Task DeleteAsync(string id)
+    {
+        processing = true;
+        var result = await ProveedorService.DeleteLogicoAsync(id);
+        ShowResult(result);
+        if (result.Success)
+        {
+            await LoadAsync();
+        }
+
+        processing = false;
+    }
+
+    private void ShowResult(Result result)
+    {
+        alertSuccess = result.Success;
+        alertMessage = result.Message;
+        alertErrors = result.Errors;
+    }
+
+    private void ClearAlert()
+    {
+        alertSuccess = false;
+        alertMessage = string.Empty;
+        alertErrors = [];
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        UpdateRouteState();
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= HandleLocationChanged;
+    }
+}

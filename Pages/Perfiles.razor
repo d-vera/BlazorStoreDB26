@@ -1,0 +1,281 @@
+@page "/perfiles"
+@page "/perfiles/crear"
+@page "/perfiles/actualizar/{Id}"
+@using tienda.Common
+@using tienda.Models
+@using tienda.Services
+@inject PerfilService PerfilService
+@inject ClienteService ClienteService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Perfiles</PageTitle>
+
+<h1>@(showForm ? (editing ? "Actualizar perfil" : "Crear perfil") : "Perfiles")</h1>
+
+@if (!string.IsNullOrWhiteSpace(alertMessage))
+{
+    <div class="alert @(alertSuccess ? "alert-success" : "alert-danger")" role="alert">
+        @alertMessage
+        @if (alertErrors.Count > 0)
+        {
+            <ul class="mb-0 mt-1">
+                @foreach (var error in alertErrors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        }
+    </div>
+}
+
+@if (!showForm)
+{
+    <section class="section-panel">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h4 mb-0">Perfiles de clientes activos</h2>
+            <a class="btn btn-primary" href="/perfiles/crear">Nuevo perfil</a>
+        </div>
+
+        @if (perfiles.Count == 0)
+        {
+            <p class="text-muted">No hay perfiles activos.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Cliente asociado</th>
+                            <th>Dirección</th>
+                            <th>Ciudad</th>
+                            <th>País</th>
+                            <th>Fecha Nacimiento</th>
+                            <th>Puntos Fidelidad</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in perfiles)
+                        {
+                            var owner = clientes.FirstOrDefault(c => c.Id == item.ClienteId);
+                            <tr>
+                                <td class="fw-semibold">
+                                    @(owner is null ? "Sin cliente asignado" : $"{owner.Nombres} {owner.Apellidos}")
+                                </td>
+                                <td>@item.Direccion</td>
+                                <td><span class="badge-soft-teal">@item.Ciudad</span></td>
+                                <td>@item.Pais</td>
+                                <td>@item.FechaNacimiento.ToString("dd/MM/yyyy")</td>
+                                <td><span class="badge bg-secondary">@item.PuntosFidelidad pts</span></td>
+                                <td>
+                                    <a class="btn btn-sm btn-outline-primary me-2" href="/perfiles/actualizar/@item.Id">Editar</a>
+                                    <button class="btn btn-sm btn-outline-danger" type="button" @onclick="() => DeleteAsync(item.Id)">Eliminar</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+else
+{
+    <section class="form-panel">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <p class="eyebrow">@(editing ? "Edición" : "Registro")</p>
+                <h2 class="h4 mb-0">@(editing ? "Datos del perfil" : "Nuevo perfil")</h2>
+            </div>
+            <a class="btn btn-outline-secondary" href="/perfiles">Volver a perfiles</a>
+        </div>
+
+        <EditForm Model="perfil" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+            <div class="mb-3">
+                <label class="form-label" for="clienteId">Cliente (Relación 1:1)</label>
+                <InputSelect id="clienteId" class="form-select" @bind-Value="perfil.ClienteId">
+                    <option value="">Sin cliente (No vinculado)</option>
+                    @foreach (var cliente in clientes)
+                    {
+                        <option value="@cliente.Id">@cliente.Nombres @cliente.Apellidos (@cliente.Documento)</option>
+                    }
+                </InputSelect>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="direccion">Dirección de residencia</label>
+                <InputText id="direccion" class="form-control" @bind-Value="perfil.Direccion" />
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="ciudad">Ciudad</label>
+                    <InputText id="ciudad" class="form-control" @bind-Value="perfil.Ciudad" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="pais">País</label>
+                    <InputText id="pais" class="form-control" @bind-Value="perfil.Pais" />
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="fechaNacimiento">Fecha de nacimiento</label>
+                    <InputDate id="fechaNacimiento" class="form-control" @bind-Value="perfil.FechaNacimiento" min="@MinBirthDateString" max="@TodayString" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="puntosFidelidad">Puntos de fidelidad</label>
+                    <InputNumber id="puntosFidelidad" class="form-control" @bind-Value="perfil.PuntosFidelidad" min="0" />
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <button class="btn btn-primary me-2" type="submit" disabled="@processing">@(editing ? "Guardar cambios" : "Crear perfil")</button>
+                <a class="btn btn-secondary" href="/perfiles">Cancelar</a>
+            </div>
+        </EditForm>
+    </section>
+}
+
+@code {
+    private List<Perfil> perfiles = [];
+    private List<Cliente> clientes = [];
+    [Parameter]
+    public string? Id { get; set; }
+
+    private readonly DateTime Today = DateTime.Today;
+    private readonly DateTime MinBirthDate = DateTime.Today.AddYears(-120);
+    private Perfil perfil = new() { FechaNacimiento = DateTime.Today.AddYears(-18) };
+    private bool showForm;
+    private bool editing;
+    private bool processing;
+    private bool alertSuccess;
+    private string alertMessage = string.Empty;
+    private List<string> alertErrors = [];
+
+    private string TodayString => Today.ToString("yyyy-MM-dd");
+    private string MinBirthDateString => MinBirthDate.ToString("yyyy-MM-dd");
+
+    protected override async Task OnParametersSetAsync()
+    {
+        UpdateRouteState();
+        if (!showForm)
+        {
+            await LoadAsync();
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(Id))
+        {
+            await LoadForEditAsync(Id);
+        }
+        else
+        {
+            PrepareNew();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += HandleLocationChanged;
+    }
+
+    private void UpdateRouteState()
+    {
+        showForm = !string.IsNullOrWhiteSpace(Id) || Navigation.Uri.TrimEnd('/').EndsWith("/perfiles/crear", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task LoadAsync()
+    {
+        var perfResult = await PerfilService.GetAllAsync();
+        ShowResult(perfResult);
+        if (perfResult.Success && perfResult.Data is not null)
+        {
+            perfiles = perfResult.Data;
+        }
+
+        var cliResult = await ClienteService.GetAllAsync();
+        if (cliResult.Success && cliResult.Data is not null)
+        {
+            clientes = cliResult.Data;
+        }
+    }
+
+    private void PrepareNew()
+    {
+        editing = false;
+        perfil = new Perfil { FechaNacimiento = Today.AddYears(-18) };
+        ClearAlert();
+    }
+
+    private async Task LoadForEditAsync(string id)
+    {
+        await LoadAsync();
+        var result = await PerfilService.GetByIdAsync(id);
+        ShowResult(result);
+        if (result.Success && result.Data is not null)
+        {
+            perfil = result.Data;
+            editing = true;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        processing = true;
+        ClearAlert();
+
+        var result = editing
+            ? await PerfilService.UpdateAsync(perfil.Id, perfil)
+            : await PerfilService.CreateAsync(perfil);
+
+        ShowResult(result);
+        if (result.Success)
+        {
+            Navigation.NavigateTo("/perfiles");
+        }
+
+        processing = false;
+    }
+
+    private async Task DeleteAsync(string id)
+    {
+        processing = true;
+        var result = await PerfilService.DeleteLogicoAsync(id);
+        ShowResult(result);
+        if (result.Success)
+        {
+            await LoadAsync();
+        }
+
+        processing = false;
+    }
+
+    private void ShowResult(Result result)
+    {
+        alertSuccess = result.Success;
+        alertMessage = result.Message;
+        alertErrors = result.Errors;
+    }
+
+    private void ClearAlert()
+    {
+        alertSuccess = false;
+        alertMessage = string.Empty;
+        alertErrors = [];
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        UpdateRouteState();
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= HandleLocationChanged;
+    }
+}

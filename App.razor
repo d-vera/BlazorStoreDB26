@@ -1,0 +1,14 @@
+@using Microsoft.AspNetCore.Components.Routing
+@using tienda.Pages
+@using tienda.Shared
+
+<Router AppAssembly="@typeof(Program).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <PageTitle>No encontrado</PageTitle>
+        <p role="alert">La página solicitada no existe.</p>
+    </NotFound>
+</Router>

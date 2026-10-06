@@ -1,0 +1,326 @@
+@page "/clientes"
+@page "/clientes/crear"
+@page "/clientes/actualizar/{Id}"
+@using tienda.Common
+@using tienda.Models
+@using tienda.Services
+@inject ClienteService ClienteService
+@inject PerfilService PerfilService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Clientes</PageTitle>
+
+<h1>@(showForm ? (editing ? "Actualizar cliente" : "Crear cliente") : "Clientes")</h1>
+
+@if (!string.IsNullOrWhiteSpace(alertMessage))
+{
+    <div class="alert @(alertSuccess ? "alert-success" : "alert-danger")" role="alert">
+        @alertMessage
+        @if (alertErrors.Count > 0)
+        {
+            <ul class="mb-0">
+                @foreach (var error in alertErrors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        }
+    </div>
+}
+
+@if (!showForm)
+{
+    <section class="section-panel">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h4 mb-0">Clientes activos</h2>
+            <a class="btn btn-primary" href="/clientes/crear">Nuevo cliente</a>
+        </div>
+
+        @if (clientes.Count == 0)
+        {
+            <p class="text-muted">No hay clientes activos.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Documento</th>
+                            <th>Email</th>
+                            <th>Perfil</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var clienteItem in clientes)
+                        {
+                            <tr>
+                                <td>@clienteItem.Nombres @clienteItem.Apellidos</td>
+                                <td>@clienteItem.Documento</td>
+                                <td>@clienteItem.Email</td>
+                                @{ var perfilItem = perfiles.FirstOrDefault(item => item.Id == clienteItem.PerfilId); }
+                                <td>@(perfilItem is null ? "Sin perfil" : $"{perfilItem.Ciudad}, {perfilItem.Pais}")</td>
+                                <td>
+                                    <a class="btn btn-sm btn-outline-primary me-2" href="/clientes/actualizar/@clienteItem.Id">Editar</a>
+                                    <button class="btn btn-sm btn-outline-danger" type="button" @onclick="() => DeleteAsync(clienteItem.Id)">Eliminar</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+else
+{
+    <section class="form-panel">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <p class="eyebrow">@(editing ? "Edición" : "Registro")</p>
+                <h2 class="h4 mb-0">@(editing ? "Datos del cliente" : "Nuevo cliente")</h2>
+            </div>
+            <a class="btn btn-outline-secondary" href="/clientes">Volver a clientes</a>
+        </div>
+
+        <EditForm Model="cliente" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+            <div class="mb-3">
+                <label class="form-label" for="nombres">Nombres</label>
+                <InputText id="nombres" class="form-control" @bind-Value="cliente.Nombres" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="apellidos">Apellidos</label>
+                <InputText id="apellidos" class="form-control" @bind-Value="cliente.Apellidos" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="documento">Documento</label>
+                <InputText id="documento" class="form-control" @bind-Value="cliente.Documento" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="email">Email</label>
+                <InputText id="email" class="form-control" @bind-Value="cliente.Email" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="telefono">Teléfono</label>
+                <InputText id="telefono" class="form-control" @bind-Value="cliente.Telefono" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="fechaRegistro">Fecha de registro</label>
+                <InputDate id="fechaRegistro" class="form-control" @bind-Value="cliente.FechaRegistro" max="@TodayString" />
+                <div class="form-hint">No puede ser una fecha futura.</div>
+            </div>
+
+            <h3 class="h5">Perfil</h3>
+            <div class="mb-3">
+                <label class="form-label" for="direccion">Dirección</label>
+                <InputText id="direccion" class="form-control" @bind-Value="perfil.Direccion" />
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="ciudad">Ciudad</label>
+                    <InputText id="ciudad" class="form-control" @bind-Value="perfil.Ciudad" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="pais">País</label>
+                    <InputText id="pais" class="form-control" @bind-Value="perfil.Pais" />
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="fechaNacimiento">Fecha de nacimiento</label>
+                <InputDate id="fechaNacimiento" class="form-control" @bind-Value="perfil.FechaNacimiento" min="@MinBirthDateString" max="@TodayString" />
+                <div class="form-hint">Selecciona una fecha entre @MinBirthDate.ToString("dd/MM/yyyy") y hoy.</div>
+            </div>
+
+            <button class="btn btn-primary me-2" type="submit" disabled="@processing">@(editing ? "Guardar cambios" : "Crear cliente")</button>
+        </EditForm>
+    </section>
+}
+
+@code {
+    private List<Cliente> clientes = [];
+    private List<Perfil> perfiles = [];
+    [Parameter]
+    public string? Id { get; set; }
+
+    private readonly DateTime Today = DateTime.Today;
+    private readonly DateTime MinBirthDate = DateTime.Today.AddYears(-120);
+    private Cliente cliente = new() { FechaRegistro = DateTime.Today };
+    private Perfil perfil = new() { FechaNacimiento = DateTime.Today.AddYears(-18) };
+    private bool showForm;
+    private bool editing;
+    private bool processing;
+    private bool alertSuccess;
+    private string alertMessage = string.Empty;
+    private List<string> alertErrors = [];
+
+    private string TodayString => Today.ToString("yyyy-MM-dd");
+    private string MinBirthDateString => MinBirthDate.ToString("yyyy-MM-dd");
+
+    protected override async Task OnParametersSetAsync()
+    {
+        UpdateRouteState();
+        if (!showForm)
+        {
+            await LoadAsync();
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(Id))
+        {
+            await LoadForEditAsync(Id);
+        }
+        else
+        {
+            PrepareNew();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += HandleLocationChanged;
+    }
+
+    private void UpdateRouteState()
+    {
+        showForm = !string.IsNullOrWhiteSpace(Id) || Navigation.Uri.TrimEnd('/').EndsWith("/clientes/crear", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task LoadAsync()
+    {
+        var result = await ClienteService.GetAllAsync();
+        ShowResult(result);
+        if (result.Success && result.Data is not null)
+        {
+            clientes = result.Data;
+        }
+
+        var profilesResult = await PerfilService.GetAllAsync();
+        if (profilesResult.Success && profilesResult.Data is not null)
+        {
+            perfiles = profilesResult.Data;
+        }
+    }
+
+    private void Create()
+    {
+        Navigation.NavigateTo("/clientes/crear");
+    }
+
+    private void PrepareNew()
+    {
+        editing = false;
+        cliente = new Cliente { FechaRegistro = Today };
+        perfil = new Perfil { FechaNacimiento = Today.AddYears(-18) };
+        ClearAlert();
+    }
+
+    private async Task LoadForEditAsync(string id)
+    {
+        var clientResult = await ClienteService.GetByIdAsync(id);
+        ShowResult(clientResult);
+        if (!clientResult.Success || clientResult.Data is null)
+        {
+            return;
+        }
+
+        cliente = clientResult.Data;
+        editing = true;
+
+        if (!string.IsNullOrWhiteSpace(cliente.PerfilId))
+        {
+            var result = await PerfilService.GetByIdAsync(cliente.PerfilId);
+            ShowResult(result);
+            if (result.Success && result.Data is not null)
+            {
+                perfil = result.Data;
+            }
+        }
+    }
+
+    private void EditAsync(Cliente selected)
+    {
+        Navigation.NavigateTo($"/clientes/actualizar/{selected.Id}");
+    }
+
+    private async Task SaveAsync()
+    {
+        processing = true;
+        ClearAlert();
+
+        Result<Cliente> clientResult;
+        if (editing)
+        {
+            clientResult = await ClienteService.UpdateAsync(cliente.Id, cliente);
+            ShowResult(clientResult);
+            if (clientResult.Success && clientResult.Data is not null)
+            {
+                cliente = clientResult.Data;
+                perfil.ClienteId = cliente.Id;
+                var profileResult = await PerfilService.UpdateAsync(cliente.PerfilId ?? string.Empty, perfil);
+                ShowResult(profileResult);
+                if (profileResult.Success)
+                {
+                    Navigation.NavigateTo("/clientes");
+                }
+            }
+        }
+        else
+        {
+            clientResult = await ClienteService.CreateAsync(cliente, perfil);
+            ShowResult(clientResult);
+            if (clientResult.Success)
+            {
+                Navigation.NavigateTo("/clientes");
+            }
+        }
+
+        processing = false;
+    }
+
+    private async Task DeleteAsync(string id)
+    {
+        processing = true;
+        var result = await ClienteService.DeleteLogicoAsync(id);
+        ShowResult(result);
+        if (result.Success)
+        {
+            await LoadAsync();
+        }
+
+        processing = false;
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/clientes");
+    }
+
+    private void ShowResult(Result result)
+    {
+        alertSuccess = result.Success;
+        alertMessage = result.Message;
+        alertErrors = result.Errors;
+    }
+
+    private void ClearAlert()
+    {
+        alertSuccess = false;
+        alertMessage = string.Empty;
+        alertErrors = [];
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        UpdateRouteState();
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= HandleLocationChanged;
+    }
+}

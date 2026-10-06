@@ -1,0 +1,412 @@
+@page "/pedidos"
+@page "/pedidos/crear"
+@page "/pedidos/actualizar/{Id}"
+@using tienda.Common
+@using tienda.Models
+@using tienda.Services
+@inject PedidoService PedidoService
+@inject ClienteService ClienteService
+@inject ProductoService ProductoService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Pedidos</PageTitle>
+
+<h1>@(showForm ? (editing ? "Actualizar pedido" : "Crear pedido") : "Pedidos")</h1>
+
+@if (!string.IsNullOrWhiteSpace(alertMessage))
+{
+    <div class="alert @(alertSuccess ? "alert-success" : "alert-danger")" role="alert">
+        @alertMessage
+        @if (alertErrors.Count > 0)
+        {
+            <ul class="mb-0 mt-1">
+                @foreach (var error in alertErrors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        }
+    </div>
+}
+
+@if (!showForm)
+{
+    <section class="section-panel">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h4 mb-0">Pedidos activos</h2>
+            <a class="btn btn-primary" href="/pedidos/crear">Nuevo pedido</a>
+        </div>
+
+        @if (pedidos.Count == 0)
+        {
+            <p class="text-muted">No hay pedidos activos.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Cliente</th>
+                            <th>Fecha</th>
+                            <th>Estado</th>
+                            <th>Método Pago</th>
+                            <th>Productos / Cantidades</th>
+                            <th>Total</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in pedidos)
+                        {
+                            var clienteItem = clientes.FirstOrDefault(c => c.Id == item.ClienteId);
+                            var detailSummary = (item.Detalles ?? []).Select(d =>
+                            {
+                                var prod = productos.FirstOrDefault(p => p.Id == d.ProductoId);
+                                return $"{prod?.Nombre ?? "Producto"} (x{d.Cantidad})";
+                            });
+
+                            <tr>
+                                <td class="fw-semibold">@(clienteItem is null ? "Cliente no disponible" : $"{clienteItem.Nombres} {clienteItem.Apellidos}")</td>
+                                <td>@item.FechaPedido.ToString("dd/MM/yyyy")</td>
+                                <td>
+                                    <span class="badge @GetStatusBadgeClass(item.Estado)">@item.Estado</span>
+                                </td>
+                                <td>@item.MetodoPago</td>
+                                <td>@string.Join(", ", detailSummary)</td>
+                                <td class="fw-bold text-success">$@item.Total.ToString("N0")</td>
+                                <td>
+                                    @if (!string.Equals(item.Estado, "Entregado", StringComparison.OrdinalIgnoreCase) && !string.Equals(item.Estado, "Cancelado", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <a class="btn btn-sm btn-outline-primary me-2" href="/pedidos/actualizar/@item.Id">Editar</a>
+                                    }
+                                    <button class="btn btn-sm btn-outline-danger" type="button" @onclick="() => DeleteAsync(item.Id)">Eliminar</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+else
+{
+    <section class="form-panel">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <p class="eyebrow">@(editing ? "Edición" : "Registro")</p>
+                <h2 class="h4 mb-0">@(editing ? "Datos del pedido" : "Nuevo pedido")</h2>
+            </div>
+            <a class="btn btn-outline-secondary" href="/pedidos">Volver a pedidos</a>
+        </div>
+
+        <EditForm Model="pedido" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+            <div class="mb-3">
+                <label class="form-label" for="clienteId">Cliente comprador</label>
+                <InputSelect id="clienteId" class="form-select" @bind-Value="pedido.ClienteId">
+                    <option value="">Seleccione un cliente</option>
+                    @foreach (var c in clientes)
+                    {
+                        <option value="@c.Id">@c.Nombres @c.Apellidos (@c.Documento)</option>
+                    }
+                </InputSelect>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="fechaPedido">Fecha de pedido</label>
+                    <InputDate id="fechaPedido" class="form-control" @bind-Value="pedido.FechaPedido" max="@TodayString" />
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="estado">Estado del pedido</label>
+                    <InputSelect id="estado" class="form-select" @bind-Value="pedido.Estado">
+                        @foreach (var st in InputValidation.AllowedPedidoEstados)
+                        {
+                            <option value="@st">@st</option>
+                        }
+                    </InputSelect>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="metodoPago">Método de pago</label>
+                    <InputSelect id="metodoPago" class="form-select" @bind-Value="pedido.MetodoPago">
+                        <option value="">Seleccione método de pago</option>
+                        @foreach (var mp in InputValidation.AllowedMetodosPago)
+                        {
+                            <option value="@mp">@mp</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="direccionEnvio">Dirección de envío</label>
+                    <InputText id="direccionEnvio" class="form-control" @bind-Value="pedido.DireccionEnvio" />
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label">Selección de Productos y Cantidades (N:N)</label>
+                @if (productos.Count == 0)
+                {
+                    <p class="text-muted small">No hay productos activos disponibles.</p>
+                }
+                else
+                {
+                    <div class="checkbox-group-container">
+                        @foreach (var prod in productos)
+                        {
+                            var existingDetail = detalles.FirstOrDefault(d => d.ProductoId == prod.Id);
+                            var isSelected = existingDetail is not null;
+
+                            <div class="p-2 mb-2 bg-white border rounded">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <label class="checkbox-item mb-0">
+                                        <input type="checkbox" class="form-check-input" checked="@isSelected" @onchange="(e) => ToggleProductDetail(prod, e.Value)" />
+                                        <span>
+                                            <strong>@prod.Nombre</strong>
+                                            <span class="text-muted small ms-1">($@prod.Precio.ToString("N0") | Stock: @prod.Stock)</span>
+                                        </span>
+                                    </label>
+
+                                    @if (isSelected && existingDetail is not null)
+                                    {
+                                        <div class="d-flex align-items-center gap-2" style="width: 140px;">
+                                            <span class="small text-muted">Cant:</span>
+                                            <input type="number" class="form-control form-control-sm" min="1" max="@prod.Stock"
+                                                   value="@existingDetail.Cantidad"
+                                                   @onchange="(e) => UpdateQuantity(existingDetail, e.Value)" />
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="card bg-light border-0 mb-4 p-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="h5 mb-0">Total del pedido:</span>
+                    <span class="h4 mb-0 text-success fw-bold">$@pedido.Total.ToString("N0")</span>
+                </div>
+            </div>
+
+            <div>
+                <button class="btn btn-primary me-2" type="submit" disabled="@processing">@(editing ? "Guardar cambios" : "Crear pedido")</button>
+                <a class="btn btn-secondary" href="/pedidos">Cancelar</a>
+            </div>
+        </EditForm>
+    </section>
+}
+
+@code {
+    private List<Pedido> pedidos = [];
+    private List<Cliente> clientes = [];
+    private List<Producto> productos = [];
+    private List<DetallePedido> detalles = [];
+
+    [Parameter]
+    public string? Id { get; set; }
+
+    private Pedido pedido = new();
+    private bool showForm;
+    private bool editing;
+    private bool processing;
+    private bool alertSuccess;
+    private string alertMessage = string.Empty;
+    private List<string> alertErrors = [];
+
+    private string TodayString => DateTime.Today.ToString("yyyy-MM-dd");
+
+    protected override async Task OnParametersSetAsync()
+    {
+        UpdateRouteState();
+        if (!showForm)
+        {
+            await LoadAsync();
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(Id))
+        {
+            await LoadForEditAsync(Id);
+        }
+        else
+        {
+            PrepareNew();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += HandleLocationChanged;
+    }
+
+    private void UpdateRouteState()
+    {
+        showForm = !string.IsNullOrWhiteSpace(Id) || Navigation.Uri.TrimEnd('/').EndsWith("/pedidos/crear", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task LoadAsync()
+    {
+        var pedResult = await PedidoService.GetAllAsync();
+        ShowResult(pedResult);
+        if (pedResult.Success && pedResult.Data is not null)
+        {
+            pedidos = pedResult.Data;
+        }
+
+        var cliResult = await ClienteService.GetAllAsync();
+        if (cliResult.Success && cliResult.Data is not null)
+        {
+            clientes = cliResult.Data;
+        }
+
+        var prodResult = await ProductoService.GetAllAsync();
+        if (prodResult.Success && prodResult.Data is not null)
+        {
+            productos = prodResult.Data;
+        }
+    }
+
+    private void PrepareNew()
+    {
+        editing = false;
+        pedido = new Pedido
+        {
+            FechaPedido = DateTime.Today,
+            Estado = "Pendiente",
+            MetodoPago = "PSE"
+        };
+        detalles = [];
+        ClearAlert();
+        RecalculateTotal();
+    }
+
+    private async Task LoadForEditAsync(string id)
+    {
+        await LoadAsync();
+        var result = await PedidoService.GetByIdAsync(id);
+        ShowResult(result);
+        if (result.Success && result.Data is not null)
+        {
+            pedido = result.Data;
+            detalles = (pedido.Detalles ?? []).ToList();
+            editing = true;
+            RecalculateTotal();
+        }
+    }
+
+    private void ToggleProductDetail(Producto prod, object? checkedValue)
+    {
+        bool isChecked = checkedValue is bool b && b;
+        var existing = detalles.FirstOrDefault(d => d.ProductoId == prod.Id);
+
+        if (isChecked && existing is null)
+        {
+            detalles.Add(new DetallePedido
+            {
+                ProductoId = prod.Id,
+                Cantidad = 1,
+                PrecioUnitario = prod.Precio
+            });
+        }
+        else if (!isChecked && existing is not null)
+        {
+            detalles.Remove(existing);
+        }
+
+        RecalculateTotal();
+    }
+
+    private void UpdateQuantity(DetallePedido detail, object? val)
+    {
+        if (int.TryParse(val?.ToString(), out int qty) && qty > 0)
+        {
+            detail.Cantidad = qty;
+        }
+        else
+        {
+            detail.Cantidad = 1;
+        }
+        RecalculateTotal();
+    }
+
+    private void RecalculateTotal()
+    {
+        pedido.Detalles = detalles;
+        pedido.ProductosIds = detalles.Select(d => d.ProductoId).Distinct().ToList();
+        pedido.Total = detalles.Sum(d => d.Cantidad * d.PrecioUnitario);
+    }
+
+    private async Task SaveAsync()
+    {
+        processing = true;
+        ClearAlert();
+
+        RecalculateTotal();
+
+        var result = editing
+            ? await PedidoService.UpdateAsync(pedido.Id, pedido)
+            : await PedidoService.CreateAsync(pedido);
+
+        ShowResult(result);
+        if (result.Success)
+        {
+            Navigation.NavigateTo("/pedidos");
+        }
+
+        processing = false;
+    }
+
+    private async Task DeleteAsync(string id)
+    {
+        processing = true;
+        var result = await PedidoService.DeleteLogicoAsync(id);
+        ShowResult(result);
+        if (result.Success)
+        {
+            await LoadAsync();
+        }
+
+        processing = false;
+    }
+
+    private static string GetStatusBadgeClass(string status) => status switch
+    {
+        "Entregado" => "bg-success",
+        "Enviado" => "bg-info text-dark",
+        "Procesando" => "bg-primary",
+        "Cancelado" => "bg-danger",
+        _ => "bg-warning text-dark"
+    };
+
+    private void ShowResult(Result result)
+    {
+        alertSuccess = result.Success;
+        alertMessage = result.Message;
+        alertErrors = result.Errors;
+    }
+
+    private void ClearAlert()
+    {
+        alertSuccess = false;
+        alertMessage = string.Empty;
+        alertErrors = [];
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        UpdateRouteState();
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= HandleLocationChanged;
+    }
+}
